@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "name": "STM32H723",
+      "compilerPath": "arm-none-eabi-gcc",
+      "compilerArgs": ["-mcpu=cortex-m7", "-mthumb", "-mfpu=fpv5-d16", "-mfloat-abi=hard"],
+      "includePath": ["${workspaceFolder}/src/**", "${workspaceFolder}/cmsis/core", "${workspaceFolder}/cmsis/device"],
+      "defines": ["STM32H723xx", "USE_PWR_LDO_SUPPLY"],
+      "cStandard": "c11",
+      "intelliSenseMode": "linux-gcc-arm"
+    }
+  ],
+  "version": 4
+}
