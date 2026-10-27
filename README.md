@@ -1,0 +1,1 @@
+This is just a repo for quick small projects with my STM32 boards. I am writing these to get myself back up to speed somewhat before I start a project I have planned using an STM32 board.
