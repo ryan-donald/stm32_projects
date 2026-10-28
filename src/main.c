@@ -2,8 +2,9 @@
 #include "uart.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
+#define LINE_MAX    64             // line limit [char]
 
-volatile uint32_t ticks_ms;
+static volatile uint32_t ticks_ms;
 
 void SysTick_Handler(void)
 {
@@ -32,13 +33,37 @@ int main(void)
     
     uint32_t last_toggle = ticks_ms;
 
+    char line[LINE_MAX + 1];
+    uint32_t line_len = 0;
+
+
+
     while (1)
     {
 
-        // echoes on UART whatever it receives
+        // echoes each character, then repeats the whole line on a new line after Enter
         if (uart_rx_ready())
         {
-            uart_putc(uart_getc());
+            char c = uart_getc();
+
+            // on newline, print full line received
+            if (c == '\r')
+            {
+                line[line_len] = '\0';
+                uart_puts("\r\n");
+                uart_puts(line);
+                uart_puts("\r\n");
+                line_len = 0;
+            }
+            // if not a newline, echo character and add to line
+            else if (c != '\n')
+            {
+                uart_putc(c);
+                if (line_len < LINE_MAX)
+                {
+                    line[line_len++] = c;
+                }
+            }
         }
 
         // toggle LED every 1000 ms without blocking

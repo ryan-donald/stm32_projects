@@ -2,6 +2,11 @@
 #include "uart.h"
 
 #define UART_KER_CLK 64000000UL         // USART3 kernel clock (hsi_ker)
+#define RX_BUF_SIZE 64                  // UART receive buffer, must be a power of 2
+
+static volatile char rx_buf[RX_BUF_SIZE];   // UART rx ring buffer
+static volatile uint32_t rx_head;           // next slot the interrupt writes
+static volatile uint32_t rx_tail;           // next slot uart_getc reads
 
 void uart_init(uint32_t baud)
 {
@@ -41,11 +46,14 @@ void uart_init(uint32_t baud)
     USART3->BRR = UART_KER_CLK / baud;
 
     // enables USART with configuration
-    USART3->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
+    USART3->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE | USART_CR1_UE;
 
     // wait until the transmitter and receiver report they are enabled
     while ((USART3->ISR & (USART_ISR_TEACK | USART_ISR_REACK))
            != (USART_ISR_TEACK | USART_ISR_REACK)) { };
+
+    // enable interrupt on USART3 rx
+    NVIC_EnableIRQ(USART3_IRQn);
 }
 
 // transmits a single char over UART, waits until the transmit register is free
@@ -64,21 +72,40 @@ void uart_puts(const char *s)
     }
 }
 
-// waits until a character arrives on UART RX and returns it
-char uart_getc(void)
+// stores incoming data in ring buffer
+void USART3_IRQHandler(void)
 {
-    // clear overrun
+    // clear overrun, will deadlock if we dont
     if (USART3->ISR & USART_ISR_ORE)
     {
         USART3->ICR = USART_ICR_ORECF;
     }
-    // wait for rx ready flag
-    while (!uart_rx_ready()) { };
-    return (char)USART3->RDR;
+
+    // read rx data and store in ring buffer if not full.
+    if (USART3->ISR & USART_ISR_RXNE_RXFNE)
+    {
+        char c = (char)USART3->RDR;
+        uint32_t next = (rx_head + 1) & (RX_BUF_SIZE - 1);
+
+        if (next != rx_tail)
+        {
+            rx_buf[rx_head] = c;
+            rx_head = next;
+        }
+    }
 }
 
-// returns a 1 if there is a character waiting on UART RX
+// waits until a character is in the rx ring buffer and returns it
+char uart_getc(void)
+{
+    while (!uart_rx_ready()) { };
+    char c = rx_buf[rx_tail];
+    rx_tail = (rx_tail + 1) & (RX_BUF_SIZE - 1);
+    return c;
+}
+
+// returns a 1 if the buffer is not empty.
 int uart_rx_ready(void)
 {
-    return (USART3->ISR & USART_ISR_RXNE_RXFNE) != 0;
+    return rx_head != rx_tail;
 }
