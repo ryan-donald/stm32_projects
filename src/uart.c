@@ -72,6 +72,38 @@ void uart_puts(const char *s)
     }
 }
 
+// transmits a signed integer as decimal text
+void uart_put_int(int32_t data)
+{
+    char digits[10];        // a 32-bit value has at most 10 digits
+    uint32_t magnitude;
+    uint32_t len = 0;
+
+    // print sign and extract magnitude
+    if (data < 0)
+    {
+        uart_putc('-');
+        magnitude = -(uint32_t)data;
+    }
+    else
+    {
+        magnitude = data;
+    }
+
+    // extract one digit at a time, stored lowest first
+    while (magnitude != 0)
+    {
+        digits[len++] = '0' + (magnitude % 10);
+        magnitude /= 10;
+    }
+
+    // transmit digits from len down to 0
+    while (len > 0)
+    {
+        uart_putc(digits[--len]);
+    }
+}
+
 // stores incoming data in ring buffer
 void USART3_IRQHandler(void)
 {
