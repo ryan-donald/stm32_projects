@@ -1,8 +1,10 @@
 #include "stm32h7xx.h"
 #include "uart.h"
+#include "spi.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
 #define LINE_MAX    64             // line limit [char]
+#define WHO_AM_I    0x0F           // ISM330DHCX ID register, reads 0x6B
 
 static volatile uint32_t ticks_ms;
 
@@ -30,7 +32,16 @@ int main(void)
     SysTick_Config(SystemCoreClock / 1000);
 
     uart_init(BAUD_RATE);
-    
+    spi_init();
+
+    // print the sensor ID as hex to check the SPI wiring
+    const char hex[] = "0123456789ABCDEF";
+    uint8_t id = spi_read_reg(WHO_AM_I);
+    uart_puts("WHO_AM_I = 0x");
+    uart_putc(hex[id >> 4]);
+    uart_putc(hex[id & 0x0F]);
+    uart_puts("\r\n");
+
     uint32_t last_toggle = ticks_ms;
 
     char line[LINE_MAX + 1];
