@@ -79,6 +79,13 @@ void uart_put_int(int32_t data)
     uint32_t magnitude;
     uint32_t len = 0;
 
+    // for 0 just print it to uart and skip logic
+    if (data == 0)
+    {
+        uart_putc('0');
+        return;
+    }
+
     // print sign and extract magnitude
     if (data < 0)
     {

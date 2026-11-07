@@ -4,6 +4,6 @@
 #include <stdint.h>
 
 void ism330_init(void);
-void read_data(int16_t *xyz);
+void read_data(int16_t *temp, int16_t *gyro, int16_t *accel);
 
 #endif
