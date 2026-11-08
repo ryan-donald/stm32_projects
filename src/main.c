@@ -40,7 +40,6 @@ int main(void)
     uart_init(BAUD_RATE);
     spi_init();
     delay_ms(10);
-    ism330_init();
 
     // print the sensor ID as hex to check the SPI wiring
     const char hex[] = "0123456789ABCDEF";
@@ -49,6 +48,9 @@ int main(void)
     uart_putc(hex[id >> 4]);
     uart_putc(hex[id & 0x0F]);
     uart_puts("\r\n");
+
+    ism330_init();
+    ism330_irq_init();
 
     uint32_t last_toggle = ticks_ms;
 
@@ -91,11 +93,14 @@ int main(void)
 
 
 
-        // read the sensor and print accel in mg, gyro in mdps and temp in mdegC every PRINT_MS
+        // print the latest sample as accel in mg, gyro in mdps and temp in mdegC every PRINT_MS,
+        // and how many samples the interrupt read since the last print
         if ((ticks_ms - last_print) >= PRINT_MS)
         {
-            read_data(&temp, gyro, accel);
-            uart_puts("ax=");
+            uint32_t samples = read_data_irq(&temp, gyro, accel);
+            uart_puts("n=");
+            uart_put_int(samples);
+            uart_puts("  ax=");
             uart_put_int((int32_t)accel[0] * ACCEL_UG / 1000);
             uart_puts("  ay=");
             uart_put_int((int32_t)accel[1] * ACCEL_UG / 1000);
