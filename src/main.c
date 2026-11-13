@@ -37,17 +37,17 @@ int main(void)
     //SysTick interrupt every 1 ms
     SysTick_Config(SystemCoreClock / 1000);
 
-    uart_init(BAUD_RATE);
+    uart3_init(BAUD_RATE);
     spi_init();
     delay_ms(10);
 
     // print the sensor ID as hex to check the SPI wiring
     const char hex[] = "0123456789ABCDEF";
     uint8_t id = spi_read_reg(WHO_AM_I);
-    uart_puts("WHO_AM_I = 0x");
-    uart_putc(hex[id >> 4]);
-    uart_putc(hex[id & 0x0F]);
-    uart_puts("\r\n");
+    uart_puts(&uart3, "WHO_AM_I = 0x");
+    uart_putc(&uart3, hex[id >> 4]);
+    uart_putc(&uart3, hex[id & 0x0F]);
+    uart_puts(&uart3, "\r\n");
 
     ism330_init();
     ism330_irq_init();
@@ -67,23 +67,23 @@ int main(void)
     {
 
         // // echoes each character, then repeats the whole line on a new line after Enter
-        // if (uart_rx_ready())
+        // if (uart_rx_ready(&uart3))
         // {
-        //     char c = uart_getc();
+        //     char c = uart_getc(&uart3);
 
         //     // on newline, print full line received
         //     if (c == '\r')
         //     {
         //         line[line_len] = '\0';
-        //         uart_puts("\r\n");
-        //         uart_puts(line);
-        //         uart_puts("\r\n");
+        //         uart_puts(&uart3, "\r\n");
+        //         uart_puts(&uart3, line);
+        //         uart_puts(&uart3, "\r\n");
         //         line_len = 0;
         //     }
         //     // if not a newline, echo character and add to line
         //     else if (c != '\n')
         //     {
-        //         uart_putc(c);
+        //         uart_putc(&uart3, c);
         //         if (line_len < LINE_MAX)
         //         {
         //             line[line_len++] = c;
@@ -98,23 +98,23 @@ int main(void)
         if ((ticks_ms - last_print) >= PRINT_MS)
         {
             uint32_t samples = read_data_irq(&temp, gyro, accel);
-            uart_puts("n=");
-            uart_put_int(samples);
-            uart_puts("  ax=");
-            uart_put_int((int32_t)accel[0] * ACCEL_UG / 1000);
-            uart_puts("  ay=");
-            uart_put_int((int32_t)accel[1] * ACCEL_UG / 1000);
-            uart_puts("  az=");
-            uart_put_int((int32_t)accel[2] * ACCEL_UG / 1000);
-            uart_puts(" mg  gx=");
-            uart_put_int((int32_t)gyro[0] * GYRO_UDPS / 1000);
-            uart_puts("  gy=");
-            uart_put_int((int32_t)gyro[1] * GYRO_UDPS / 1000);
-            uart_puts("  gz=");
-            uart_put_int((int32_t)gyro[2] * GYRO_UDPS / 1000);
-            uart_puts(" mdps  t=");
-            uart_put_int(TEMP_ZERO * 1000 + (int32_t)temp * 1000 / TEMP_LSB);
-            uart_puts(" mdegC\r\n");
+            uart_puts(&uart3, "n=");
+            uart_put_int(&uart3, samples);
+            uart_puts(&uart3, "  ax=");
+            uart_put_int(&uart3, (int32_t)accel[0] * ACCEL_UG / 1000);
+            uart_puts(&uart3, "  ay=");
+            uart_put_int(&uart3, (int32_t)accel[1] * ACCEL_UG / 1000);
+            uart_puts(&uart3, "  az=");
+            uart_put_int(&uart3, (int32_t)accel[2] * ACCEL_UG / 1000);
+            uart_puts(&uart3, " mg  gx=");
+            uart_put_int(&uart3, (int32_t)gyro[0] * GYRO_UDPS / 1000);
+            uart_puts(&uart3, "  gy=");
+            uart_put_int(&uart3, (int32_t)gyro[1] * GYRO_UDPS / 1000);
+            uart_puts(&uart3, "  gz=");
+            uart_put_int(&uart3, (int32_t)gyro[2] * GYRO_UDPS / 1000);
+            uart_puts(&uart3, " mdps  t=");
+            uart_put_int(&uart3, TEMP_ZERO * 1000 + (int32_t)temp * 1000 / TEMP_LSB);
+            uart_puts(&uart3, " mdegC\r\n");
             last_print += PRINT_MS;
         }
 
