@@ -54,8 +54,8 @@ int main(void)
 
     uint32_t last_toggle = ticks_ms;
 
-    char line[LINE_MAX + 1];
-    uint32_t line_len = 0;
+    // char line[LINE_MAX + 1];
+    // uint32_t line_len = 0;
 
     int16_t temp;
     int16_t gyro[3];

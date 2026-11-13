@@ -6,10 +6,14 @@
 
 static volatile uint8_t rx_buf[RX_BUF_SIZE];   // UART rx ring buffer
 
-uart_t uart3 = {
+static const uart_config_t uart3_config = {
     .uart_registers = USART3,
     .irq = USART3_IRQn,
-    .rx_buf = rx_buf,                   // UART rx ring buffer
+    .rx_buf = rx_buf,
+};
+
+uart_t uart3 = {
+    .config = &uart3_config,
     .rx_head = 0,                      // next slot the interrupt writes
     .rx_tail = 0,                      // next slot uart_getc reads
 };
@@ -42,49 +46,50 @@ void uart3_init(uint32_t baud)
     uart_init(&uart3, baud);
 }
 
-void uart_init(uart_t *uart_config, uint32_t baud)
+void uart_init(uart_t *uart, uint32_t baud)
 {
-    
+    USART_TypeDef *registers = uart->config->uart_registers;
+
     // disable USART to configure
-    uart_config->uart_registers->CR1 = 0;
+    registers->CR1 = 0;
     // 1 stop bit
-    uart_config->uart_registers->CR2 = 0;
+    registers->CR2 = 0;
     // no flow control
-    uart_config->uart_registers->CR3 = 0;
+    registers->CR3 = 0;
     // no prescaler
-    uart_config->uart_registers->PRESC = 0;
+    registers->PRESC = 0;
     // sets baud rate
-    uart_config->uart_registers->BRR = UART_KER_CLK / baud;
+    registers->BRR = UART_KER_CLK / baud;
 
     // enables USART with configuration
-    uart_config->uart_registers->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE | USART_CR1_UE;
+    registers->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE | USART_CR1_UE;
 
     // wait until the transmitter and receiver report they are enabled
-    while ((uart_config->uart_registers->ISR & (USART_ISR_TEACK | USART_ISR_REACK))
+    while ((registers->ISR & (USART_ISR_TEACK | USART_ISR_REACK))
            != (USART_ISR_TEACK | USART_ISR_REACK)) { };
 
-    // enable interrupt on USART3 rx
-    NVIC_EnableIRQ(uart_config->irq);
+    // enable the UART interrupt
+    NVIC_EnableIRQ(uart->config->irq);
 }
 
 // transmits a single char over UART, waits until the transmit register is free
-void uart_putc(uart_t *uart_config, char c)
+void uart_putc(uart_t *uart, char c)
 {
-    while (!(uart_config->uart_registers->ISR & USART_ISR_TXE_TXFNF)) { };
-    uart_config->uart_registers->TDR = c;
+    while (!(uart->config->uart_registers->ISR & USART_ISR_TXE_TXFNF)) { };
+    uart->config->uart_registers->TDR = c;
 }
 
 // transmits a string over UART char by char
-void uart_puts(uart_t *uart_config, const char *s)
+void uart_puts(uart_t *uart, const char *s)
 {
     for (uint32_t i = 0; s[i] != '\0'; i++)
     {
-        uart_putc(uart_config, s[i]);
+        uart_putc(uart, s[i]);
     }
 }
 
 // transmits a signed integer as decimal text
-void uart_put_int(uart_t *uart_config, int32_t data)
+void uart_put_int(uart_t *uart, int32_t data)
 {
     char digits[10];        // a 32-bit value has at most 10 digits
     uint32_t magnitude;
@@ -93,14 +98,14 @@ void uart_put_int(uart_t *uart_config, int32_t data)
     // for 0 just print it to uart and skip logic
     if (data == 0)
     {
-        uart_putc(uart_config, '0');
+        uart_putc(uart, '0');
         return;
     }
 
     // print sign and extract magnitude
     if (data < 0)
     {
-        uart_putc(uart_config, '-');
+        uart_putc(uart, '-');
         magnitude = -(uint32_t)data;
     }
     else
@@ -118,29 +123,31 @@ void uart_put_int(uart_t *uart_config, int32_t data)
     // transmit digits from len down to 0
     while (len > 0)
     {
-        uart_putc(uart_config, digits[--len]);
+        uart_putc(uart, digits[--len]);
     }
 }
 
 // stores incoming data in ring buffer
-void uart_irq(uart_t *uart_config)
+void uart_irq(uart_t *uart)
 {
+    USART_TypeDef *registers = uart->config->uart_registers;
+
     // clear overrun, will deadlock if we dont
-    if (uart_config->uart_registers->ISR & USART_ISR_ORE)
+    if (registers->ISR & USART_ISR_ORE)
     {
-        uart_config->uart_registers->ICR = USART_ICR_ORECF;
+        registers->ICR = USART_ICR_ORECF;
     }
 
     // read rx data and store in ring buffer if not full.
-    if (uart_config->uart_registers->ISR & USART_ISR_RXNE_RXFNE)
+    if (registers->ISR & USART_ISR_RXNE_RXFNE)
     {
-        char c = (char)uart_config->uart_registers->RDR;
-        uint32_t next = (uart_config->rx_head + 1) & (RX_BUF_SIZE - 1);
+        char c = (char)registers->RDR;
+        uint32_t next = (uart->rx_head + 1) & (RX_BUF_SIZE - 1);
 
-        if (next != uart_config->rx_tail)
+        if (next != uart->rx_tail)
         {
-            uart_config->rx_buf[uart_config->rx_head] = c;
-            uart_config->rx_head = next;
+            uart->config->rx_buf[uart->rx_head] = c;
+            uart->rx_head = next;
         }
     }
 }
@@ -151,16 +158,16 @@ void USART3_IRQHandler(void)
 }
 
 // waits until a character is in the rx ring buffer and returns it
-char uart_getc(uart_t *uart_config)
+char uart_getc(uart_t *uart)
 {
-    while (!uart_rx_ready(uart_config)) { };
-    char c = uart_config->rx_buf[uart_config->rx_tail];
-    uart_config->rx_tail = (uart_config->rx_tail + 1) & (RX_BUF_SIZE - 1);
+    while (!uart_rx_ready(uart)) { };
+    char c = uart->config->rx_buf[uart->rx_tail];
+    uart->rx_tail = (uart->rx_tail + 1) & (RX_BUF_SIZE - 1);
     return c;
 }
 
 // returns a 1 if the buffer is not empty.
-int uart_rx_ready(uart_t *uart_config)
+int uart_rx_ready(uart_t *uart)
 {
-    return uart_config->rx_head != uart_config->rx_tail;
+    return uart->rx_head != uart->rx_tail;
 }
