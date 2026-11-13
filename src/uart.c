@@ -3,19 +3,24 @@
 
 #define UART_KER_CLK 64000000UL         // USART3 kernel clock (hsi_ker)
 #define RX_BUF_SIZE 64                  // UART receive buffer, must be a power of 2
+#define TX_BUF_SIZE 256                 // UART transmit buffer, must be a power of 2
 
 static volatile uint8_t rx_buf[RX_BUF_SIZE];   // UART rx ring buffer
+static volatile uint8_t tx_buf[TX_BUF_SIZE];   // UART tx ring buffer
 
 static const uart_config_t uart3_config = {
     .uart_registers = USART3,
     .irq = USART3_IRQn,
     .rx_buf = rx_buf,
+    .tx_buf = tx_buf,
 };
 
 uart_t uart3 = {
     .config = &uart3_config,
     .rx_head = 0,                      // next slot the interrupt writes
     .rx_tail = 0,                      // next slot uart_getc reads
+    .tx_head = 0,                      // next slot uart_putc writes
+    .tx_tail = 0,                      // next slot the interrupt sends
 };
 
 void uart3_init(uint32_t baud)
@@ -72,40 +77,65 @@ void uart_init(uart_t *uart, uint32_t baud)
     NVIC_EnableIRQ(uart->config->irq);
 }
 
-// transmits a single char over UART, waits until the transmit register is free
+// queues len bytes for transmit, waits only while the tx ring buffer is full
+void uart_write(uart_t *uart, const uint8_t *data, uint32_t len)
+{
+    uint32_t i = 0;
+
+    while (i < len)
+    {
+        uint32_t head = uart->tx_head;
+
+        // copy until the data ends or the buffer is full
+        while (i < len)
+        {
+            uint32_t next = (head + 1) & (TX_BUF_SIZE - 1);
+            if (next == uart->tx_tail)
+            {
+                break;
+            }
+            uart->config->tx_buf[head] = data[i++];
+            head = next;
+        }
+
+        // publish the copied bytes and set interrupt enable bit to start sending
+        uart->tx_head = head;
+        uart->config->uart_registers->CR1 |= USART_CR1_TXEIE_TXFNFIE;
+
+        // wait until there is space in the buffer if full
+        while (i < len && ((uart->tx_head + 1) & (TX_BUF_SIZE - 1)) == uart->tx_tail) { };
+    }
+}
+
+// queues a single char for transmit
 void uart_putc(uart_t *uart, char c)
 {
-    while (!(uart->config->uart_registers->ISR & USART_ISR_TXE_TXFNF)) { };
-    uart->config->uart_registers->TDR = c;
+    uart_write(uart, (const uint8_t *)&c, 1);
 }
 
-// transmits a string over UART char by char
+// queues a string for transmit
 void uart_puts(uart_t *uart, const char *s)
 {
-    for (uint32_t i = 0; s[i] != '\0'; i++)
-    {
-        uart_putc(uart, s[i]);
-    }
-}
-
-// transmits a signed integer as decimal text
-void uart_put_int(uart_t *uart, int32_t data)
-{
-    char digits[10];        // a 32-bit value has at most 10 digits
-    uint32_t magnitude;
     uint32_t len = 0;
 
-    // for 0 just print it to uart and skip logic
-    if (data == 0)
+    // count characters up to the null terminator
+    while (s[len] != '\0')
     {
-        uart_putc(uart, '0');
-        return;
+        len++;
     }
+    uart_write(uart, (const uint8_t *)s, len);
+}
 
-    // print sign and extract magnitude
+// queues a signed integer as decimal text
+void uart_put_int(uart_t *uart, int32_t data)
+{
+    char text[11];          // sign plus at most 10 digits for a 32-bit value
+    uint32_t pos = sizeof(text);
+    uint32_t magnitude;
+
+    // extract magnitude
     if (data < 0)
     {
-        uart_putc(uart, '-');
         magnitude = -(uint32_t)data;
     }
     else
@@ -113,21 +143,23 @@ void uart_put_int(uart_t *uart, int32_t data)
         magnitude = data;
     }
 
-    // extract one digit at a time, stored lowest first
-    while (magnitude != 0)
+    // fill digits from the end, lowest first, do-while so 0 still prints one digit
+    do
     {
-        digits[len++] = '0' + (magnitude % 10);
+        text[--pos] = '0' + (magnitude % 10);
         magnitude /= 10;
+    } while (magnitude != 0);
+
+    // add sign in front of the digits
+    if (data < 0)
+    {
+        text[--pos] = '-';
     }
 
-    // transmit digits from len down to 0
-    while (len > 0)
-    {
-        uart_putc(uart, digits[--len]);
-    }
+    uart_write(uart, (const uint8_t *)&text[pos], sizeof(text) - pos);
 }
 
-// stores incoming data in ring buffer
+// stores incoming data in the rx ring buffer and sends from the tx ring buffer
 void uart_irq(uart_t *uart)
 {
     USART_TypeDef *registers = uart->config->uart_registers;
@@ -148,6 +180,21 @@ void uart_irq(uart_t *uart)
         {
             uart->config->rx_buf[uart->rx_head] = c;
             uart->rx_head = next;
+        }
+    }
+
+    // send next char and disable interrupt when empty
+    if ((registers->CR1 & USART_CR1_TXEIE_TXFNFIE) && (registers->ISR & USART_ISR_TXE_TXFNF))
+    {
+        if (uart->tx_tail != uart->tx_head)
+        {
+            registers->TDR = uart->config->tx_buf[uart->tx_tail];
+            uart->tx_tail = (uart->tx_tail + 1) & (TX_BUF_SIZE - 1);
+        }
+
+        if (uart->tx_tail == uart->tx_head)
+        {
+            registers->CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
         }
     }
 }
