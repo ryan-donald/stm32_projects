@@ -1,1 +1,1 @@
-This is just a repo for quick small projects with my STM32 boards. I am writing these to get myself back up to speed somewhat before I start a project I have planned using an STM32 board.
+This is a repo containing some of the basic code and drivers for some of my small and quick stm32 projects. I have them split by board, currently I have tested on the NUCLEO-H723ZG board, and I am waiting for the NUCLEO-N657X0-Q board to ship, so it is not tested.
