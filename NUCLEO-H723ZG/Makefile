@@ -6,7 +6,11 @@ CC      = $(PREFIX)gcc
 OBJCOPY = $(PREFIX)objcopy
 SIZE    = $(PREFIX)size
 
-# Every .c file under src/ is built; every directory under src/ is an include path
+# shared driver sources
+COMMON = ../common
+COMMON_SRCS = $(shell find $(COMMON) -name '*.c')
+
+# board sources and CMSIS startup
 SRCS = $(shell find src -name '*.c') \
        cmsis/device/system_stm32h7xx.c \
        cmsis/device/startup_stm32h723xx.s
@@ -17,7 +21,7 @@ LDSCRIPT = STM32H723ZGTX_FLASH.ld
 MCU = -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard
 
 DEFS = -DSTM32H723xx -DUSE_PWR_LDO_SUPPLY
-INCS = -Icmsis/core -Icmsis/device $(addprefix -I,$(shell find src -type d))
+INCS = -Icmsis/core -Icmsis/device $(addprefix -I,$(shell find src $(COMMON) -type d))
 
 CFLAGS  = $(MCU) $(DEFS) $(INCS) -std=c11 -Og -g3 -Wall -Wextra \
           -ffunction-sections -fdata-sections -MMD -MP
@@ -25,11 +29,16 @@ ASFLAGS = $(MCU) -x assembler-with-cpp -g3
 LDFLAGS = $(MCU) -T$(LDSCRIPT) --specs=nano.specs --specs=nosys.specs \
           -Wl,--gc-sections -Wl,-Map=$(BUILD)/$(TARGET).map -Wl,--print-memory-usage
 
-OBJS = $(addprefix $(BUILD)/,$(addsuffix .o,$(basename $(SRCS))))
+OBJS = $(addprefix $(BUILD)/,$(addsuffix .o,$(basename $(SRCS)))) \
+       $(patsubst $(COMMON)/%.c,$(BUILD)/common/%.o,$(COMMON_SRCS))
 
 all: $(BUILD)/$(TARGET).elf $(BUILD)/$(TARGET).bin
 
 $(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/common/%.o: $(COMMON)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

@@ -6,6 +6,7 @@
       "compilerArgs": ["-mcpu=cortex-m7", "-mthumb", "-mfpu=fpv5-d16", "-mfloat-abi=hard"],
       "includePath": [
         "${workspaceFolder}/NUCLEO-H723ZG/src/**",
+        "${workspaceFolder}/common/**",
         "${workspaceFolder}/NUCLEO-H723ZG/cmsis/core",
         "${workspaceFolder}/NUCLEO-H723ZG/cmsis/device"
       ],
@@ -19,6 +20,7 @@
       "compilerArgs": ["-mcpu=cortex-m55", "-mthumb", "-mfloat-abi=hard", "-mcmse"],
       "includePath": [
         "${workspaceFolder}/NUCLEO-N657X0-Q/src/**",
+        "${workspaceFolder}/common/**",
         "${workspaceFolder}/NUCLEO-N657X0-Q/cmsis/core",
         "${workspaceFolder}/NUCLEO-N657X0-Q/cmsis/device"
       ],

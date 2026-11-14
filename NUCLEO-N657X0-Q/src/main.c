@@ -1,5 +1,5 @@
 #include "stm32n6xx.h"
-#include "uart.h"
+#include "bsp_uart.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
 

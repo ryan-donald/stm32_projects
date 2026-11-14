@@ -1,5 +1,5 @@
 #include "stm32h7xx.h"
-#include "uart.h"
+#include "bsp_uart.h"
 #include "spi.h"
 #include "ism330.h"
 
