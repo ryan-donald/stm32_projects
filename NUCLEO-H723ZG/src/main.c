@@ -1,9 +1,10 @@
 #include "stm32h7xx.h"
 #include "bsp_uart.h"
-#include "spi.h"
+#include "bsp_spi.h"
 #include "ism330.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
+#define SPI_SCK_HZ  2000000        // SPI clock for the ISM330 [Hz]
 #define LINE_MAX    64             // line limit [char]
 #define WHO_AM_I    0x0F           // ISM330DHCX ID register, reads 0x6B
 #define PRINT_MS    100            // sensor print period [ms]
@@ -38,12 +39,12 @@ int main(void)
     SysTick_Config(SystemCoreClock / 1000);
 
     uart3_init(BAUD_RATE);
-    spi_init();
+    spi1_init(SPI_SCK_HZ);
     delay_ms(10);
 
     // print the sensor ID as hex to check the SPI wiring
     const char hex[] = "0123456789ABCDEF";
-    uint8_t id = spi_read_reg(WHO_AM_I);
+    uint8_t id = spi_read_reg(&spi1, WHO_AM_I);
     uart_puts(&uart3, "WHO_AM_I = 0x");
     uart_putc(&uart3, hex[id >> 4]);
     uart_putc(&uart3, hex[id & 0x0F]);

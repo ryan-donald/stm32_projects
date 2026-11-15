@@ -1,5 +1,5 @@
 #include "stm32h7xx.h"
-#include "spi.h"
+#include "bsp_spi.h"
 #include "ism330.h"
 
 // register addresses
@@ -34,25 +34,25 @@ static uint32_t sample_count;       // samples read since the last read_data_irq
 
 void ism330_init(void)
 {
-    if (spi_read_reg(WHO_AM_I) != 0x6B)
+    if (spi_read_reg(&spi1, WHO_AM_I) != 0x6B)
     {
         return;
     }
 
     // software reset on imu
-    spi_write_reg(CTRL3_C, 0x01);
+    spi_write_reg(&spi1, CTRL3_C, 0x01);
 
     // wait for the software reset to complete
-    while (spi_read_reg(CTRL3_C) & 0x01) { };
+    while (spi_read_reg(&spi1, CTRL3_C) & 0x01) { };
 
     // set block data update so each read if always from the same cycle
-    spi_write_reg(CTRL3_C, 0x44);
+    spi_write_reg(&spi1, CTRL3_C, 0x44);
 
     // configure accelerometer rate
-    spi_write_reg(CTRL1_XL, 0x60);
+    spi_write_reg(&spi1, CTRL1_XL, 0x60);
 
     // configure gyroscope rate
-    spi_write_reg(CTRL2_G, 0x60);
+    spi_write_reg(&spi1, CTRL2_G, 0x60);
 }
 
 // wait for bits 0 and 1 of STATUS_REG to be set, burst read 14 bytes,
@@ -61,9 +61,9 @@ void read_data(int16_t *temp, int16_t *gyro, int16_t *accel)
 {
     uint8_t raw[14];
 
-    while((spi_read_reg(STATUS_REG) & 0x03) != 0x03) { };
+    while((spi_read_reg(&spi1, STATUS_REG) & 0x03) != 0x03) { };
 
-    spi_read_regs(OUT_TEMP_L, raw, 14);
+    spi_read_regs(&spi1, OUT_TEMP_L, raw, 14);
 
     // each value is a little-endian 16-bit value
     // order: temp bytes 0-1, gyro 2-7, accel 8-13
@@ -79,10 +79,10 @@ void read_data(int16_t *temp, int16_t *gyro, int16_t *accel)
 void ism330_irq_init(void)
 {
     // pulse data-ready signal
-    spi_write_reg(COUNTER_BDR_REG1, 0x80);
+    spi_write_reg(&spi1, COUNTER_BDR_REG1, 0x80);
 
     // route gyro data-ready to INT1, gyro and accel have same rate
-    spi_write_reg(INT1_CTRL, 0x02);
+    spi_write_reg(&spi1, INT1_CTRL, 0x02);
 
     // enable clocks for GPIOD and SYSCFG
     RCC->AHB4ENR |= RCC_AHB4ENR_GPIODEN;
@@ -104,7 +104,7 @@ void ism330_irq_init(void)
 void EXTI15_10_IRQHandler(void)
 {
     EXTI_D1->PR1 = EXTI_PR1_PR15;
-    spi_read_regs(OUT_TEMP_L, sample, 14);
+    spi_read_regs(&spi1, OUT_TEMP_L, sample, 14);
     sample_count++;
 }
 
