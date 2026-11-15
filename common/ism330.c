@@ -1,5 +1,3 @@
-#include "stm32h7xx.h"
-#include "bsp_spi.h"
 #include "ism330.h"
 
 // register addresses
@@ -29,41 +27,38 @@
 
 #define WHO_AM_I        0x0F     // WHO_AM_I
 
-static uint8_t sample[14];          // latest raw temp, gyro, accel registers, written by the interrupt
-static uint32_t sample_count;       // samples read since the last read_data_irq
-
-void ism330_init(void)
+void ism330_init(ism330_t *imu)
 {
-    if (spi_read_reg(&spi1, WHO_AM_I) != 0x6B)
+    if (spi_read_reg(imu->config->spi, WHO_AM_I) != 0x6B)
     {
         return;
     }
 
     // software reset on imu
-    spi_write_reg(&spi1, CTRL3_C, 0x01);
+    spi_write_reg(imu->config->spi, CTRL3_C, 0x01);
 
     // wait for the software reset to complete
-    while (spi_read_reg(&spi1, CTRL3_C) & 0x01) { };
+    while (spi_read_reg(imu->config->spi, CTRL3_C) & 0x01) { };
 
     // set block data update so each read if always from the same cycle
-    spi_write_reg(&spi1, CTRL3_C, 0x44);
+    spi_write_reg(imu->config->spi, CTRL3_C, 0x44);
 
     // configure accelerometer rate
-    spi_write_reg(&spi1, CTRL1_XL, 0x60);
+    spi_write_reg(imu->config->spi, CTRL1_XL, 0x60);
 
     // configure gyroscope rate
-    spi_write_reg(&spi1, CTRL2_G, 0x60);
+    spi_write_reg(imu->config->spi, CTRL2_G, 0x60);
 }
 
 // wait for bits 0 and 1 of STATUS_REG to be set, burst read 14 bytes,
 // and store in buffers
-void read_data(int16_t *temp, int16_t *gyro, int16_t *accel)
+void ism330_read(ism330_t *imu, int16_t *temp, int16_t *gyro, int16_t *accel)
 {
     uint8_t raw[14];
 
-    while((spi_read_reg(&spi1, STATUS_REG) & 0x03) != 0x03) { };
+    while((spi_read_reg(imu->config->spi, STATUS_REG) & 0x03) != 0x03) { };
 
-    spi_read_regs(&spi1, OUT_TEMP_L, raw, 14);
+    spi_read_regs(imu->config->spi, OUT_TEMP_L, raw, 14);
 
     // each value is a little-endian 16-bit value
     // order: temp bytes 0-1, gyro 2-7, accel 8-13
@@ -76,40 +71,27 @@ void read_data(int16_t *temp, int16_t *gyro, int16_t *accel)
 }
 
 // interrupt based data collection
-void ism330_irq_init(void)
+void ism330_irq_init(ism330_t *imu)
 {
     // pulse data-ready signal
-    spi_write_reg(&spi1, COUNTER_BDR_REG1, 0x80);
+    spi_write_reg(imu->config->spi, COUNTER_BDR_REG1, 0x80);
 
     // route gyro data-ready to INT1, gyro and accel have same rate
-    spi_write_reg(&spi1, INT1_CTRL, 0x02);
+    spi_write_reg(imu->config->spi, INT1_CTRL, 0x02);
 
-    // enable clocks for GPIOD and SYSCFG
-    RCC->AHB4ENR |= RCC_AHB4ENR_GPIODEN;
-    RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
-    (void)RCC->APB4ENR;
-
-    // PD15 (INT1) as input
-    GPIOD->MODER &= ~GPIO_MODER_MODE15;
-
-    // EXTI15 from port D, interrupt on rising edge
-    SYSCFG->EXTICR[3] = (SYSCFG->EXTICR[3] & ~SYSCFG_EXTICR4_EXTI15) | SYSCFG_EXTICR4_EXTI15_PD;
-    EXTI->RTSR1 |= EXTI_RTSR1_TR15;
-    EXTI_D1->IMR1 |= EXTI_IMR1_IM15;
-    
-    NVIC_EnableIRQ(EXTI15_10_IRQn);
+    // enable the INT1 interrupt
+    NVIC_EnableIRQ(imu->config->irq);
 }
 
 // burst reads 14 bytes on every INT1 data-ready pulse
-void EXTI15_10_IRQHandler(void)
+void ism330_irq(ism330_t *imu)
 {
-    EXTI_D1->PR1 = EXTI_PR1_PR15;
-    spi_read_regs(&spi1, OUT_TEMP_L, sample, 14);
-    sample_count++;
+    spi_read_regs(imu->config->spi, OUT_TEMP_L, imu->config->sample, 14);
+    imu->sample_count++;
 }
 
 // copies the latest sample into buffers, and returns the number of samples since last call
-uint32_t read_data_irq(int16_t *temp, int16_t *gyro, int16_t *accel)
+uint32_t ism330_read_irq(ism330_t *imu, int16_t *temp, int16_t *gyro, int16_t *accel)
 {
     uint8_t raw[14];
 
@@ -117,10 +99,10 @@ uint32_t read_data_irq(int16_t *temp, int16_t *gyro, int16_t *accel)
     __disable_irq();
     for (uint32_t i = 0; i < 14; i++)
     {
-        raw[i] = sample[i];
+        raw[i] = imu->config->sample[i];
     }
-    uint32_t count = sample_count;
-    sample_count = 0;
+    uint32_t count = imu->sample_count;
+    imu->sample_count = 0;
     __enable_irq();
 
     // each value is a little-endian 16-bit value

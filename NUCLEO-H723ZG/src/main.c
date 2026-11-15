@@ -1,7 +1,7 @@
 #include "stm32h7xx.h"
 #include "bsp_uart.h"
 #include "bsp_spi.h"
-#include "ism330.h"
+#include "bsp_ism330.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
 #define SPI_SCK_HZ  2000000        // SPI clock for the ISM330 [Hz]
@@ -50,8 +50,7 @@ int main(void)
     uart_putc(&uart3, hex[id & 0x0F]);
     uart_puts(&uart3, "\r\n");
 
-    ism330_init();
-    ism330_irq_init();
+    imu_init();
 
     uint32_t last_toggle = ticks_ms;
 
@@ -98,7 +97,7 @@ int main(void)
         // and how many samples the interrupt read since the last print
         if ((ticks_ms - last_print) >= PRINT_MS)
         {
-            uint32_t samples = read_data_irq(&temp, gyro, accel);
+            uint32_t samples = ism330_read_irq(&imu, &temp, gyro, accel);
             uart_puts(&uart3, "n=");
             uart_put_int(&uart3, samples);
             uart_puts(&uart3, "  ax=");
