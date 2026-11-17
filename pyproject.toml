@@ -1,0 +1,13 @@
+[project]
+name = "stm32-tools"
+version = "0.1.0"
+description = "test and analysis scripts for my stm32s and sensor boards"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "pyserial",
+]
+
+[tool.uv]
+package = false
