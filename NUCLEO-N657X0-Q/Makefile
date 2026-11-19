@@ -7,6 +7,7 @@ OBJCOPY = $(PREFIX)objcopy
 SIZE    = $(PREFIX)size
 READELF = $(PREFIX)readelf
 OPENOCD ?= openocd
+CUBEPROG ?= $(HOME)/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin
 
 # shared driver sources
 COMMON = ../common
@@ -60,9 +61,16 @@ flash: $(BUILD)/$(TARGET).elf
 	        -c "init; reset halt; load_image $<; verify_image $<" \
 	        -c "resume [expr {$$($(READELF) -h $< | awk '/Entry point/ {print $$4}') & ~1}]; exit"
 
+$(BUILD)/$(TARGET)_trusted.bin: $(BUILD)/$(TARGET).bin
+	$(CUBEPROG)/STM32_SigningTool_CLI -bin $< -nk -t fsbl -hv 2.3 -o $@ --align -s
+
+flash-boot: $(BUILD)/$(TARGET)_trusted.bin
+	$(CUBEPROG)/STM32_Programmer_CLI -c port=SWD mode=HOTPLUG \
+	        -el $(CUBEPROG)/ExternalLoader/MX25UM51245G_STM32N6570-NUCLEO.stldr -hardRst -w $< 0x70000000 -v
+
 clean:
 	rm -rf $(BUILD)
 
 -include $(OBJS:.o=.d)
 
-.PHONY: all flash clean
+.PHONY: all flash flash-boot clean
