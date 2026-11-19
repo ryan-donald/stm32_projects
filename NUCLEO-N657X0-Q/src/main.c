@@ -1,4 +1,5 @@
 #include "stm32n6xx.h"
+#include "bsp_clock.h"
 #include "bsp_uart.h"
 #include "bsp_spi.h"
 #include "bsp_ism330.h"
@@ -27,6 +28,8 @@ void delay_ms(uint32_t delay)
 
 int main(void)
 {
+    clock_init();
+
     // enable GPIO for LED, green LD on PG0
     RCC->AHB4ENR |= RCC_AHB4ENR_GPIOGEN;
     (void)RCC->AHB4ENR;
