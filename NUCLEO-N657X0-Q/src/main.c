@@ -3,6 +3,9 @@
 #include "bsp_uart.h"
 #include "bsp_spi.h"
 #include "bsp_ism330.h"
+#include "bsp_csi.h"
+#include "bsp_vl53l9.h"
+#include "vl53l9_frame.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
 #define SPI_SCK_HZ  2000000        // SPI clock for the ISM330 [Hz]
@@ -54,6 +57,20 @@ int main(void)
 
     imu_init();
 
+    // boot the VL53L9, arm the CSI receiver and start ranging
+    int ret = tof_init();
+    uart_puts(&uart1, "tof_init = ");
+    uart_put_int(&uart1, ret);
+    if (ret != 0)
+    {
+        uart_puts(&uart1, " at ");
+        uart_puts(&uart1, tof_failed_step);
+    }
+    uart_puts(&uart1, "\r\n");
+
+    uint32_t last_frames = ticks_ms;
+    uint32_t frames = 0;
+
     uint32_t last_toggle = ticks_ms;
 
     int16_t temp;
@@ -93,6 +110,26 @@ int main(void)
         {
             GPIOG->ODR ^= (1<<0);
             last_toggle += 1000;
+        }
+
+        if ((ticks_ms - last_frames) >= 1000)
+        {
+            uint32_t count = csi.frame_count;
+            uart_puts(&uart1, "frames/s=");
+            uart_put_int(&uart1, count - frames);
+            uart_puts(&uart1, "  errors=");
+            uart_put_int(&uart1, csi.errors);
+            uart_puts(&uart1, "  bytes=");
+            uart_put_int(&uart1, vl53l9_frame_lines(tof_ranging.binning, tof_ranging.dss) * VL53L9_CSI_LINE_SIZE);
+            uart_puts(&uart1, "\r\n");
+            frames = count;
+            last_frames += 1000;
+        }
+
+        const uint8_t *frame = csi_get_frame(&csi);
+        if (frame != NULL)
+        {
+            // the frame stays valid until the next csi_get_frame
         }
     }
 }
