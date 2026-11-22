@@ -6,8 +6,10 @@
 #include "bsp_csi.h"
 #include "bsp_vl53l9.h"
 #include "vl53l9_frame.h"
+#include "vl53l9_stream.h"
 
-#define BAUD_RATE   115200         // baud rate for UART
+#define BAUD_RATE   4000000        // baud rate for UART
+#define MIN_AMPLITUDE 64           // zones below this amplitude are sent as no target
 #define SPI_SCK_HZ  2000000        // SPI clock for the ISM330 [Hz]
 #define WHO_AM_I    0x0F           // ISM330DHCX ID register, reads 0x6B
 #define PRINT_MS    100            // sensor print period [ms]
@@ -32,6 +34,7 @@ void delay_ms(uint32_t delay)
 int main(void)
 {
     clock_init();
+    SCB_EnableICache();
 
     // enable GPIO for LED, green LD on PG0
     RCC->AHB4ENR |= RCC_AHB4ENR_GPIOGEN;
@@ -130,6 +133,8 @@ int main(void)
         if (frame != NULL)
         {
             // the frame stays valid until the next csi_get_frame
+            vl53l9_stream_frame(&uart1, frame, tof_ranging.binning, tof_ranging.dss, MIN_AMPLITUDE, 0,
+                                csi.errors);
         }
     }
 }
