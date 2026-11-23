@@ -157,8 +157,8 @@ char uart_getc(uart_t *uart)
     return c;
 }
 
-// returns a 1 if the buffer is not empty.
-int uart_rx_ready(uart_t *uart)
+// returns true if the buffer is not empty.
+bool uart_rx_ready(uart_t *uart)
 {
     return uart->rx_head != uart->rx_tail;
 }
