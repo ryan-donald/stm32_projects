@@ -2,6 +2,7 @@
 #include "bsp_uart.h"
 #include "bsp_spi.h"
 #include "bsp_ism330.h"
+#include "bsp_gnss.h"
 
 #define BAUD_RATE   115200         // baud rate for UART
 #define SPI_SCK_HZ  2000000        // SPI clock for the ISM330 [Hz]
@@ -51,6 +52,7 @@ int main(void)
     uart_puts(&uart3, "\r\n");
 
     imu_init();
+    gnss_init();
 
     uint32_t last_toggle = ticks_ms;
 
@@ -116,6 +118,30 @@ int main(void)
             uart_put_int(&uart3, TEMP_ZERO * 1000 + (int32_t)temp * 1000 / TEMP_LSB);
             uart_puts(&uart3, " mdegC\r\n");
             last_print += PRINT_MS;
+        }
+
+        // print over UART each GNSS fix
+        if (nmea_poll(&gnss))
+        {
+            uart_puts(&uart3, "gnss n=");
+            uart_put_int(&uart3, (int32_t)gnss.fix_count);
+            uart_puts(&uart3, "  t=");
+            uart_put_int(&uart3, (int32_t)gnss.fix.time_ms);
+            uart_puts(&uart3, " ms  q=");
+            uart_put_int(&uart3, gnss.fix.quality);
+            uart_puts(&uart3, "  sats=");
+            uart_put_int(&uart3, gnss.fix.satellites);
+            uart_puts(&uart3, "  hdop=");
+            uart_put_int(&uart3, (int32_t)gnss.fix.hdop);      // x100
+            uart_puts(&uart3, "  lat=");
+            uart_put_int(&uart3, gnss.fix.lat);
+            uart_puts(&uart3, "  lon=");
+            uart_put_int(&uart3, gnss.fix.lon);
+            uart_puts(&uart3, "  alt=");
+            uart_put_int(&uart3, gnss.fix.alt_mm);
+            uart_puts(&uart3, " mm  bad=");
+            uart_put_int(&uart3, gnss.bad_count);
+            uart_puts(&uart3, "\r\n");
         }
 
         // toggle LED every 1000 ms without blocking

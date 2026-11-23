@@ -1,8 +1,26 @@
 #include "bsp.h"
 #include "bsp_uart.h"
 
+static volatile uint8_t uart1_rx_buf[RX_BUF_SIZE];   // USART1 rx ring buffer
+static volatile uint8_t uart1_tx_buf[TX_BUF_SIZE];   // USART1 tx ring buffer
 static volatile uint8_t uart3_rx_buf[RX_BUF_SIZE];   // USART3 rx ring buffer
 static volatile uint8_t uart3_tx_buf[TX_BUF_SIZE];   // USART3 tx ring buffer
+
+static const uart_config_t uart1_config = {
+    .uart_registers = USART1,
+    .irq = USART1_IRQn,
+    .ker_clk = 64000000UL,             // hsi_ker
+    .rx_buf = uart1_rx_buf,
+    .tx_buf = uart1_tx_buf,
+};
+
+uart_t uart1 = {
+    .config = &uart1_config,
+    .rx_head = 0,                      // next slot the interrupt writes
+    .rx_tail = 0,                      // next slot uart_getc reads
+    .tx_head = 0,                      // next slot uart_putc writes
+    .tx_tail = 0,                      // next slot the interrupt sends
+};
 
 static const uart_config_t uart3_config = {
     .uart_registers = USART3,
@@ -19,6 +37,35 @@ uart_t uart3 = {
     .tx_head = 0,                      // next slot uart_putc writes
     .tx_tail = 0,                      // next slot the interrupt sends
 };
+
+// D1 (PB6) = TX, D0 (PB7) = RX
+void uart1_init(uint32_t baud)
+{
+    // enable clocks for GPIOB and USART1
+    RCC->AHB4ENR |= RCC_AHB4ENR_GPIOBEN;
+    RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+
+    // register read to make sure the clock is running
+    (void)RCC->APB2ENR;
+
+    // USART1 clock = hsi_ker, clear USART16910SEL and set it to 0b011
+    RCC->D2CCIP2R = (RCC->D2CCIP2R & ~RCC_D2CCIP2R_USART16910SEL)
+                  | RCC_D2CCIP2R_USART16910SEL_1 | RCC_D2CCIP2R_USART16910SEL_0;
+
+    // PB6 (TX), PB7 (RX) in alternate function mode, AF7 = USART1
+    // clear MODE6/MODE7 bits and set each to 0b10 (AF)
+    GPIOB->MODER = (GPIOB->MODER & ~(GPIO_MODER_MODE6 | GPIO_MODER_MODE7))
+                 | GPIO_MODER_MODE6_1 | GPIO_MODER_MODE7_1;
+
+    // clear AFSEL6/AFSEL7 bits and set each to 0b0111 (AF7)
+    GPIOB->AFR[0] = (GPIOB->AFR[0] & ~(GPIO_AFRL_AFSEL6 | GPIO_AFRL_AFSEL7))
+                  | (7 << GPIO_AFRL_AFSEL6_Pos) | (7 << GPIO_AFRL_AFSEL7_Pos);
+
+    // clear PUPD7 bits and set them to 0b01 (pull-up)
+    GPIOB->PUPDR = (GPIOB->PUPDR & ~GPIO_PUPDR_PUPD7) | GPIO_PUPDR_PUPD7_0;
+
+    uart_init(&uart1, baud);
+}
 
 void uart3_init(uint32_t baud)
 {
@@ -46,6 +93,11 @@ void uart3_init(uint32_t baud)
     GPIOD->PUPDR = (GPIOD->PUPDR & ~GPIO_PUPDR_PUPD9) | GPIO_PUPDR_PUPD9_0;
 
     uart_init(&uart3, baud);
+}
+
+void USART1_IRQHandler(void)
+{
+    uart_irq(&uart1);
 }
 
 void USART3_IRQHandler(void)
